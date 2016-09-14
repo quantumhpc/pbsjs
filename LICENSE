@@ -1,3 +1,16 @@
+ ****************************************************************/
+ * PBS-JS
+ * A nodejs interface with the ressource manager PBS Pro™
+ * 
+ * PBS Pro™ is developped and maintained by Altair Engineering Inc.
+ * Last release available : <https://github.com/PBSPro/pbspro/>
+ * 
+ * Copyright (c) 2016 Quantum HPC Inc
+ * http://www.quantumhpc.com
+ * 
+ * For questions and comments: info@quantumhpc.com
+ ****************************************************************/
+ 
                    GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
