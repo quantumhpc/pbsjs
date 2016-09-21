@@ -27,7 +27,7 @@ var cmdDict = {
     "job"      :   ["qstat", "-f"],
     "jobs"     :   ["qstat"],
     "node"     :   ["pbsnodes"],
-    "nodes"    :   ["pbsnodes","-a"],
+    "nodes"    :   ["pbsnodes", "-a"],
     "submit"   :   ["qsub"],
     "delete"   :   ["qdel"],
     "setting"  :   ["qmgr", "-c"],
