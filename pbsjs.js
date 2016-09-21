@@ -173,7 +173,7 @@ function jsonifyQmgr(output){
     return results;
 }
 
-function jsonifyQnodes(output){
+function jsonifyPBSnodes(output){
     var results={};
     // Store node name
     results.name = output[0];
@@ -182,39 +182,43 @@ function jsonifyQnodes(output){
         if (output[i].indexOf('=')!== -1){
            // Split key and value to 0 and 1
             var data = output[i].split('=');
-            results[data.shift().trim()] = data.toString().trim();
+            // Parse nested values
+            if (data[0].indexOf('.')!== -1){
+                var nested = data.shift().split('.');
+                results[nested[0].trim()] = results[nested[0].trim()] || {};
+                results[nested[0].trim()][nested[1].trim()] = data.toString().trim();
+            }else{
+                results[data.shift().trim()] = data.toString().trim();
+            }
                 
         }
     }
     // Reorganise jobs into an array with jobId & jobProcs
     if (results.jobs){
         var runningJobs = [];
-        var jobData = results.jobs.trim().split(/[,/]+/);
-        // Parse jobs and forget trailing comma
-        for (var j = 0; j < jobData.length-1; j+=2) {
-            var newJob = {
-                jobId       :   jobData[j+1],
-                jobProcs    :   jobData[j],
-            };
-            runningJobs.push(newJob);
-        }
-        results.jobs = runningJobs;
-    }
-    // Reorganise status
-    if (results.status){
-        var tmpStatus = {};
-        var statusData = results.status.trim().split(/[,]+/);
-        for (var k = 0; k < statusData.length; k+=2) {
-            // Skip jobs inside status for now : TODO: store those information
-            if (statusData[k] == 'jobs'){
-                while (statusData[k] != 'state'){
-                    k++;
-                }
+        // Split by job
+        var jobData = results.jobs.trim().split(/,/);
+        // Parse jobs
+        for (var j = 0; j < jobData.length; j++) {
+            var jobProcess = jobData[j].trim().split(/\//);
+            var jobId = jobProcess[0];
+            var jobProcs = jobProcess[1];
+            // Index by jobId to increment procs
+            if(runningJobs[jobId]){
+                runningJobs[jobId].jobProcs.push(jobProcs);
+            }else{
+                runningJobs[jobId] = {
+                    jobId       :   jobId,
+                    jobProcs    :   [jobProcess[1]],
+                };
             }
-            // Create new array
-            tmpStatus[statusData[k]] = statusData[k+1];
         }
-        results.status = tmpStatus;
+        // Reorganise into JSON
+        var result = [];
+        for (var job in runningJobs){
+            result.push(runningJobs[job]);
+        }
+        results.jobs = result;
     }
     return results;
 }
@@ -431,6 +435,7 @@ function qnodes_js(pbs_config, controlCmd, nodeName, callback){
     }
     
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr));
@@ -447,7 +452,7 @@ function qnodes_js(pbs_config, controlCmd, nodeName, callback){
             if (output[j].length>1){
                 //Split at lign breaks
                 output[j]  = output[j].trim().split(/[\n;]+/);
-                nodes.push(jsonifyQnodes(output[j]));
+                nodes.push(jsonifyPBSnodes(output[j]));
             }
         }
         return callback(null, nodes);
