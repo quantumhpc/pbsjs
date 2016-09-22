@@ -182,15 +182,7 @@ function jsonifyPBSnodes(output){
         if (output[i].indexOf('=')!== -1){
            // Split key and value to 0 and 1
             var data = output[i].split('=');
-            // Parse nested values
-            if (data[0].indexOf('.')!== -1){
-                var nested = data.shift().split('.');
-                results[nested[0].trim()] = results[nested[0].trim()] || {};
-                results[nested[0].trim()][nested[1].trim()] = data.toString().trim();
-            }else{
-                results[data.shift().trim()] = data.toString().trim();
-            }
-                
+            results[data.shift().trim()] = data.toString().trim();
         }
     }
     // Reorganise jobs into an array with jobId & jobProcs
@@ -264,14 +256,7 @@ function jsonifyQstatF(output){
         if (output[i].indexOf(' = ')!== -1){
             // Split key and value to 0 and 1
             var data = output[i].split(' = ');
-            // Split properties with a . for JSON
-            if (data[0].indexOf('.')!== -1){
-                var subData = data[0].trim().split('.');
-                results[subData[0]] = results[subData[0]] || {};
-                results[subData[0]][subData[1]] = data[1].trim();
-            }else{
-                results[data[0].trim()] = data[1].trim();   
-            }
+            results[data[0].trim()] = data[1].trim();
         }
     }
     
