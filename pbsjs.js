@@ -19,13 +19,28 @@ var cproc = require('child_process');
 var spawn = cproc.spawnSync;
 var fs = require("fs");
 var path = require("path");
-var jobStatus = {'Q' : 'Queued', 'R' : 'Running', 'C' : 'Completed', 'E' : 'Exiting', 'H' : 'Held', 'T' : 'Moving', 'W' : 'Waiting'};
+var jobStatus = {
+    'B' : 'Begun', 
+    'E' : 'Exiting', 
+    'X' : 'Expired',  
+    'F' : 'Finished',
+    'H' : 'Held',  
+    'M' : 'Moved', 
+    'Q' : 'Queued', 
+    'R' : 'Running', 
+    'S' : 'Suspended', 
+    'U' : 'UserSuspended', 
+    'T' : 'Moving', 
+    'W' : 'Waiting'
+};
+
 // General command dictionnary keeping track of implemented features
 var cmdDict = {
     "queue"    :   ["qstat", "-Q"],
     "queues"   :   ["qstat", "-Q"],
-    "job"      :   ["qstat", "-f"],
-    "jobs"     :   ["qstat"],
+    "job"      :   ["qstat", "-x", "-f"],
+    "jobs"     :   ["qstat", "-x", "-w"],
+    "jobsAlt"  :   ["qstat", "-x", "-w", "-s", "-1"],
     "node"     :   ["pbsnodes"],
     "nodes"    :   ["pbsnodes", "-a"],
     "submit"   :   ["qsub"],
@@ -227,6 +242,36 @@ function jsonifyQstat(output){
     return results;
 }
 
+function jsonifyQstatAlt(output){
+    // Status is followed by a single space if not started
+    var status,time,comment;
+    if(output[9].length>1){
+        output[9] = output[9].split(/\s/);
+        status = output[9][0];
+        time = output[9][1];
+        comment = output[10];
+    }else{
+        status = output[9];
+        time = output[10];
+        comment = output[11];
+    }
+    var results = {
+        "jobId"     :   output[0],
+        "user"      :   output[1],
+        "queue"     :   output[2],
+        "name"      :   output[3],
+        "sessionID" :   output[4],
+        "NDS"       :   output[5],
+        "TSK"       :   output[6],
+        "req_memory":   output[7],
+        "req_time"  :   output[8],
+        "status"    :   jobStatus[status],
+        "time"      :   time,
+        "comment"   :   comment,
+    };
+    return results;
+}
+
 function jsonifyQueues(output){
     var results = {
         "name"        :   output[0],
@@ -240,7 +285,7 @@ function jsonifyQueues(output){
         "waiting"     :   output[8],
         "moving"      :   output[9],
         "exiting"     :   output[10],
-        "type"        :   (output[11] === 'E' ? 'Execution' : 'Routing'),
+        "type"        :   (output[11] === 'Exec' ? 'Execution' : 'Routing'),
         "completed"   :   output[12]
     };
     return results;
@@ -320,7 +365,7 @@ function qscript_js(jobArgs, localPath, callback){
     toWrite += "\n" + PBScommand + "-N " + jobName;
     
     // Workdir
-    toWrite += "\n" + PBScommand + "-d " + jobArgs.workdir;
+    // toWrite += "\n" + PBScommand + "-d " + jobArgs.workdir;
     
     // Stdout
     if (jobArgs.stdout !== undefined && jobArgs.stdout !== ''){
@@ -519,11 +564,14 @@ function qstat_js(pbs_config, jobId, callback){
         remote_cmd.push(jobId);
         jobList = false;
     }else{
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.jobs);
+        if(pbs_config.useAlternate){
+            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.jobsAlt);
+        }else{
+            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.jobs);
+        }
     }
     
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
-    
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr));
@@ -536,13 +584,23 @@ function qstat_js(pbs_config, jobId, callback){
     
     if (jobList){
         output = output.stdout.split('\n');
-        // First 2 lines are not relevant
         var jobs = [];
-        for (var j = 2; j < output.length-1; j++) {
-            output[j]  = output[j].trim().split(/[\s]+/);
-            jobs.push(jsonifyQstat(output[j]));
+        // Use the alternative format
+        if(pbs_config.useAlternate){
+            // First 5 lines are not relevant
+            for (var j = 5; j < output.length-1; j++) {
+                output[j]  = output[j].trim().split(/[\s]{2,}/);
+                jobs.push(jsonifyQstatAlt(output[j]));
+            }
+        }else{
+            // First 2 lines are not relevant
+            for (var j = 2; j < output.length-1; j++) {
+                output[j]  = output[j].trim().split(/[\s]+/);
+                jobs.push(jsonifyQstat(output[j]));
+            }
         }
         return callback(null, jobs);
+        
     }else{
         output = output.stdout.replace(/\n\t/g,"").split('\n');
         output = jsonifyQstatF(output);
@@ -654,10 +712,10 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     }
     // Add script: first element of qsubArgs
     var scriptName = path.basename(qsubArgs[0]);
-    remote_cmd.push(path.join(jobWorkingDir,scriptName));
+    remote_cmd.push(scriptName);
     
-    // Add directory to submission args
-    // remote_cmd.push("-d",jobWorkingDir);
+    // Chnage directory to working dir
+    remote_cmd = ["cd", jobWorkingDir, "&&"].concat(remote_cmd);
     
     // Submit
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
@@ -665,7 +723,6 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     if (output.stderr){
         return callback(new Error(output.stderr.replace(/\n/g,"")));
     }
-    
     var jobId = output.stdout.replace(/\n/g,"");
     return callback(null, { 
             "message"   : 'Job ' + jobId + ' submitted',
