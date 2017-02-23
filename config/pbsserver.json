@@ -1,15 +1,17 @@
 {
         "method"                : "ssh",
-        "ssh_exec"              : "/usr/bin/ssh",
-        "scp_exec"              : "/usr/bin/scp",
+        "sshExec"               : "/usr/bin/ssh",
+        "scpExec"               : "/usr/bin/scp",
         "username"              : "user",
         "uid"                   : "10000",
         "gid"                   : "10000"
         "serverName"            : "pbsserver",
         "secretAccessKey"       : "/home/user/.ssh/id_rsa",
-        "local_shell"           : "/bin/sh",
-        "local_copy"            : "/bin/cp",
-        "binaries_dir"          : "/usr/local/bin/",
+        "localShell"            : "/bin/sh",
+        "localCopy"             : "/bin/cp",
+        "binariesDir"           : "/usr/local/bin/",
         "useSharedDir"          : false,
-        "working_dir"           : "/tmp"
+        "sharedDir"             : "/localMount",
+        "useAlternate"          : true,
+        "workingDir"            : "/tmp"
 };

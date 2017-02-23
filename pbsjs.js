@@ -69,35 +69,44 @@ function cmdBuilder(binPath, cmdDictElement){
 // TODO: treat errors
 function spawnProcess(spawnCmd, spawnType, spawnDirection, pbs_config){
     var spawnExec;
-    // UID and GID throw a core dump if not correct numbers
-    if ( Number.isNaN(pbs_config.uid) || Number.isNaN(pbs_config.gid) ) {
-        return {stderr : "Please specify valid uid/gid"};
-    }  
-    var spawnOpts = { encoding : 'utf8', uid : pbs_config.uid , gid : pbs_config.gid};
+    var spawnOpts = { encoding : 'utf8'};
+    // Use UID and GID on local method
+    if(pbs_config.method === "local" || pbs_config.useSharedDir){
+        // UID and GID throw a core dump if not correct numbers
+        if ( Number.isNaN(pbs_config.uid) || Number.isNaN(pbs_config.gid) ) {
+            return {stderr : "Please specify valid uid/gid"};
+        } 
+    }
     switch (spawnType){
         case "shell":
             switch (pbs_config.method){
                 case "ssh":
-                    spawnExec = pbs_config.ssh_exec;
+                    spawnExec = pbs_config.sshExec;
                     spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey].concat(spawnCmd);
                     break;
                 case "local":
                     spawnExec = spawnCmd.shift();
-                    spawnOpts.shell = pbs_config.local_shell;
+                    spawnOpts.shell = pbs_config.localShell;
+                    spawnOpts.uid = pbs_config.uid;
+                    spawnOpts.gid = pbs_config.gid;
                     break; 
             }
             break;
         //Copy the files according to the spawnCmd array : 0 is the file, 1 is the destination dir
         case "copy":
-            // Special case if we can use a shared file system
-            if (pbs_config.useSharedDir){
-                spawnExec = pbs_config.local_copy;
-                spawnOpts.shell = pbs_config.local_shell;
-            }else{
-                switch (pbs_config.method){
-                    // Build the scp command
-                    case "ssh":
-                        spawnExec = pbs_config.scp_exec;
+            switch (pbs_config.method){
+                // Build the scp command
+                case "ssh":
+                    // Special case if we can use a shared file system
+                    if (pbs_config.useSharedDir){
+                        spawnExec = pbs_config.localCopy;
+                        spawnOpts.shell = pbs_config.localShell;
+                        spawnOpts.uid = pbs_config.uid;
+                        spawnOpts.gid = pbs_config.gid;
+                        // Replace the remote working dir by the locally mounted folder
+                        spawnCmd[1] = path.join(pbs_config.sharedDir, path.basename(spawnCmd[1]));
+                    }else{
+                        spawnExec = pbs_config.scpExec;
                         var file;
                         var destDir;
                         switch (spawnDirection){
@@ -111,16 +120,25 @@ function spawnProcess(spawnCmd, spawnType, spawnDirection, pbs_config){
                                 break;
                         }
                         spawnCmd = ["-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey,file,destDir];
-                        break;
-                    case "local":
-                        spawnExec = pbs_config.local_copy;
-                        spawnOpts.shell = pbs_config.local_shell;
-                        break;
-                }
+                    }
+                    break;
+                case "local":
+                    spawnExec = pbs_config.localCopy;
+                    spawnOpts.shell = pbs_config.localShell;
+                    spawnOpts.uid = pbs_config.uid;
+                    spawnOpts.gid = pbs_config.gid;
+                    break;
             }
             break;
     }
-    return spawn(spawnExec, spawnCmd, spawnOpts);
+    
+    var spawnReturn = spawn(spawnExec, spawnCmd, spawnOpts);
+    // Restart on first connect
+    if(spawnReturn.stderr.indexOf("Warning: Permanently added") > -1){
+        return spawn(spawnExec, spawnCmd, spawnOpts);
+    }else{
+        return spawnReturn;
+    }
 }
 
 function createUID()
@@ -134,8 +152,14 @@ function createUID()
 // Create a unique working directory in the global working directory from the config
 function createJobWorkDir(pbs_config, callback){
     // Get configuration working directory and Generate a UID for the working dir
-    var jobWorkingDir = path.join(pbs_config.working_dir,createUID());
-    
+    var workUID = createUID();
+    var jobWorkingDir = path.join(pbs_config.workingDir,workUID);
+    var sharedWorkingDir = null;
+    // Return a locally available job Directory
+    if (pbs_config.useSharedDir){
+        sharedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+    }
+        
     //Create workdir with 700 permissions
     var process = spawnProcess(["[ -d "+jobWorkingDir+" ] || mkdir -m 700 "+jobWorkingDir],"shell", null, pbs_config);
     
@@ -144,7 +168,7 @@ function createJobWorkDir(pbs_config, callback){
         return callback(new Error(process.stderr));
     }
     //TODO:handles error
-    return callback(null, jobWorkingDir);
+    return callback(null, jobWorkingDir, sharedWorkingDir);
 }
 
 
@@ -243,18 +267,6 @@ function jsonifyQstat(output){
 }
 
 function jsonifyQstatAlt(output){
-    // Status is followed by a single space if not started
-    var status,time,comment;
-    if(output[9].length>1){
-        output[9] = output[9].split(/\s/);
-        status = output[9][0];
-        time = output[9][1];
-        comment = output[10];
-    }else{
-        status = output[9];
-        time = output[10];
-        comment = output[11];
-    }
     var results = {
         "jobId"     :   output[0],
         "user"      :   output[1],
@@ -265,9 +277,9 @@ function jsonifyQstatAlt(output){
         "TSK"       :   output[6],
         "req_memory":   output[7],
         "req_time"  :   output[8],
-        "status"    :   jobStatus[status],
-        "time"      :   time,
-        "comment"   :   comment,
+        "status"    :   output[9],
+        "time"      :   output[10],
+        "comment"   :   output[11],
     };
     return results;
 }
@@ -310,10 +322,15 @@ function jsonifyQstatF(output){
     
     // Reorganise variable list into a sub-array
     if (results.Variable_List){
-        var variables = results.Variable_List.trim().split(/[=,]+/);
+        // First split by commas to separate variables
+        var variables = results.Variable_List.trim().split(/[,]+/);
+        // Clear
         results.Variable_List = {};
-        for (var k = 0; k < variables.length; k+=2) {
-            results.Variable_List[variables[k]] = variables[k+1];
+        // And split by the first = equal sign
+        for (var k = 0; k < variables.length; k++) {
+            // And split by the first = equal sign
+            variables[k] = variables[k].split('=');
+            results.Variable_List[variables[k][0]] = variables[k][1];
         }
     }
     return results;
@@ -448,7 +465,7 @@ function qnodes_js(pbs_config, controlCmd, nodeName, callback){
             // Node control
             nodeName = args.pop();
             controlCmd = args.pop();
-            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.node);
+            remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.node);
             remote_cmd = remote_cmd.concat(nodeControlCmd[controlCmd]);
             remote_cmd.push(nodeName);
             parseOutput = false;
@@ -456,16 +473,15 @@ function qnodes_js(pbs_config, controlCmd, nodeName, callback){
         case 1:
             // Node specific info
             nodeName = args.pop();
-            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.node);
+            remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.node);
             remote_cmd.push(nodeName);
             break;
         default:
             // Default
-            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.nodes);
+            remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.nodes);
     }
     
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
-    
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr));
@@ -497,7 +513,6 @@ function qnodes_js(pbs_config, controlCmd, nodeName, callback){
 function qqueues_js(pbs_config, queueName, callback){
     // JobId is optionnal so we test on the number of args
     var args = [];
-    
     for (var i = 0; i < arguments.length; i++) {
         args.push(arguments[i]);
     }
@@ -513,14 +528,14 @@ function qqueues_js(pbs_config, queueName, callback){
     // Info on a specific job
     if (args.length == 1){
         queueName = args.pop();
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.queue);
+        remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.queue);
         remote_cmd.push(queueName);
     }else{
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.queues);
+        remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.queues);
     }
     
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
-    
+
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr));
@@ -560,20 +575,25 @@ function qstat_js(pbs_config, jobId, callback){
     // Info on a specific job
     if (args.length == 1){
         jobId = args.pop();
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.job);
+        // Call by short job# to avoid errors
+        if(jobId.indexOf('.') > -1){
+            jobId = jobId.split('.')[0];
+        }
+        remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.job);
         remote_cmd.push(jobId);
         jobList = false;
     }else{
         if(pbs_config.useAlternate){
-            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.jobsAlt);
+            remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.jobsAlt);
         }else{
-            remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.jobs);
+            remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.jobs);
         }
     }
-    
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
     // Transmit the error if any
     if (output.stderr){
+        // Treat stderr: 'Warning: Permanently added \'XXXX\' (ECDSA) to the list of known hosts.\r\n',
         return callback(new Error(output.stderr));
     }
     
@@ -589,14 +609,20 @@ function qstat_js(pbs_config, jobId, callback){
         if(pbs_config.useAlternate){
             // First 5 lines are not relevant
             for (var j = 5; j < output.length-1; j++) {
-                output[j]  = output[j].trim().split(/[\s]{2,}/);
+                // First space can be truncated due to long hostnames, changing to double space
+                output[j] = output[j].replace(/^.*?\s/,function myFunction(jobname){return jobname + "  ";});
+
+                // Give some space to the status
+                output[j] = output[j].replace(/\s[A-Z]\s/,function myFunction(status){return "  " + status + "  ";});
+                //Split by double-space
+                output[j] = output[j].trim().split(/[\s]{2,}/);
                 jobs.push(jsonifyQstatAlt(output[j]));
             }
         }else{
             // First 2 lines are not relevant
-            for (var j = 2; j < output.length-1; j++) {
-                output[j]  = output[j].trim().split(/[\s]+/);
-                jobs.push(jsonifyQstat(output[j]));
+            for (var k = 2; k < output.length-1; k++) {
+                output[k]  = output[k].trim().split(/[\s]+/);
+                jobs.push(jsonifyQstat(output[k]));
             }
         }
         return callback(null, jobs);
@@ -623,7 +649,7 @@ function qdel_js(pbs_config,jobId,callback){
     // last argument is the callback function
     callback = args.pop();
     
-    var remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.delete);
+    var remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.delete);
     
     if (args.length !== 1){
         // Return an error
@@ -658,13 +684,13 @@ function qmgr_js(pbs_config, qmgrCmd, callback){
     // last argument is the callback function
     callback = args.pop();
     
-    var remote_cmd = pbs_config.binaries_dir;
+    var remote_cmd = pbs_config.binariesDir;
     if (args.length === 0){
         // Default print everything
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.settings);
+        remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.settings);
     }else{
         // TODO : handles complex qmgr commands
-        remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.setting);
+        remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.setting);
         remote_cmd.push(args.pop());
         return callback(new Error('not yet implemented'));
     }
@@ -693,7 +719,7 @@ function qmgr_js(pbs_config, qmgrCmd, callback){
 }
 */
 function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
-    var remote_cmd = cmdBuilder(pbs_config.binaries_dir, cmdDict.submit);
+    var remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.submit);
     
     if(qsubArgs.length < 1) {
         return callback(new Error('Please submit the script to run'));  
