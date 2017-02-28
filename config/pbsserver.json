@@ -4,7 +4,7 @@
         "scpExec"               : "/usr/bin/scp",
         "username"              : "user",
         "uid"                   : "10000",
-        "gid"                   : "10000"
+        "gid"                   : "10000",
         "serverName"            : "pbsserver",
         "secretAccessKey"       : "/home/user/.ssh/id_rsa",
         "localShell"            : "/bin/sh",

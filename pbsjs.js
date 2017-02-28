@@ -61,35 +61,35 @@ function cmdBuilder(binPath, cmdDictElement){
 }
 // Parse the command and return stdout of the process depending on the method
 /*
-    spawnCmd                :   shell command   /   [file, destinationDir], 
-    spawnType               :   shell           /   copy, 
-    spawnDirection          :   null            /   send || retrieve, 
+    spawnCmd                :   shell command     /   [file, destinationDir], 
+    spawnType               :   shell             /   copy, 
+    spawnLocal              :   useMountedPath?   /   file[0] is local (send action) || file[0] is remote (retrieve action(, 
     pbs_config
 */
 // TODO: treat errors
-function spawnProcess(spawnCmd, spawnType, spawnDirection, pbs_config){
+function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config){
     var spawnExec;
     var spawnOpts = { encoding : 'utf8'};
     // Use UID and GID on local method
     if(pbs_config.method === "local" || pbs_config.useSharedDir){
+        pbs_config.uid = Number(pbs_config.uid);
+        pbs_config.gid = Number(pbs_config.gid);
         // UID and GID throw a core dump if not correct numbers
-        if ( Number.isNaN(pbs_config.uid) || Number.isNaN(pbs_config.gid) ) {
+        if ( isNaN(pbs_config.uid) || isNaN(pbs_config.gid) ) {
             return {stderr : "Please specify valid uid/gid"};
         } 
     }
     switch (spawnType){
         case "shell":
-            switch (pbs_config.method){
-                case "ssh":
-                    spawnExec = pbs_config.sshExec;
-                    spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey].concat(spawnCmd);
-                    break;
-                case "local":
-                    spawnExec = spawnCmd.shift();
-                    spawnOpts.shell = pbs_config.localShell;
-                    spawnOpts.uid = pbs_config.uid;
-                    spawnOpts.gid = pbs_config.gid;
-                    break; 
+            // Certain shell commands can use the mounted Path, if so use Local
+            if(pbs_config.method === "local" || spawnLocal){
+                spawnExec = spawnCmd.shift();
+                spawnOpts.shell = pbs_config.localShell;
+                spawnOpts.uid = pbs_config.uid;
+                spawnOpts.gid = pbs_config.gid;
+            }else{
+                spawnExec = pbs_config.sshExec;
+                spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey].concat(spawnCmd);
             }
             break;
         //Copy the files according to the spawnCmd array : 0 is the file, 1 is the destination dir
@@ -97,6 +97,8 @@ function spawnProcess(spawnCmd, spawnType, spawnDirection, pbs_config){
             switch (pbs_config.method){
                 // Build the scp command
                 case "ssh":
+                    var file;
+                    var destDir;
                     // Special case if we can use a shared file system
                     if (pbs_config.useSharedDir){
                         spawnExec = pbs_config.localCopy;
@@ -104,20 +106,21 @@ function spawnProcess(spawnCmd, spawnType, spawnDirection, pbs_config){
                         spawnOpts.uid = pbs_config.uid;
                         spawnOpts.gid = pbs_config.gid;
                         // Replace the remote working dir by the locally mounted folder
-                        spawnCmd[1] = path.join(pbs_config.sharedDir, path.basename(spawnCmd[1]));
+                        if(spawnLocal){
+                            file    = spawnCmd[0];
+                            destDir = getMountedPath(pbs_config, spawnCmd[1]);
+                        }else{
+                            file    = getMountedPath(pbs_config, spawnCmd[0]);
+                            destDir = spawnCmd[1];
+                        }
                     }else{
                         spawnExec = pbs_config.scpExec;
-                        var file;
-                        var destDir;
-                        switch (spawnDirection){
-                            case "send":
-                                file    = spawnCmd[0];
-                                destDir = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[1];
-                                break;
-                            case "retrieve":
-                                file    = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[0];
-                                destDir = spawnCmd[1];
-                                break;
+                        if(spawnLocal){
+                            file    = spawnCmd[0];
+                            destDir = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[1];
+                        }else{
+                            file    = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[0];
+                            destDir = spawnCmd[1];
                         }
                         spawnCmd = ["-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey,file,destDir];
                     }
@@ -149,26 +152,69 @@ function createUID()
     });
 }
 
+function getMountedPath(pbs_config, remotePath){
+    var mountedPath;
+    if(pbs_config.method === 'ssh' && pbs_config.useSharedDir){
+        var subDir = path.relative(pbs_config.workingDir, remotePath);
+        mountedPath = path.join(pbs_config.sharedDir, subDir);
+    }else{
+        mountedPath = path.normalize(remotePath);
+    }
+    return mountedPath;
+}
+
+// Return the Remote Working Directory or its locally mounted Path
+function getJobWorkDir(pbs_config, jobId, callback){
+    
+    // Check if the user is the owner of the job
+    qstat_js(pbs_config, jobId, function(err,data){
+        if(err){
+            return callback(err);
+        }
+        var jobWorkingDir;
+        try{
+            jobWorkingDir = path.resolve(data.Variable_List.PBS_O_WORKDIR);
+        }catch(e){
+            return callback(new Error("Working directory not found"));
+        }
+        
+        if (pbs_config.useSharedDir){
+            return callback(null, getMountedPath(pbs_config, jobWorkingDir));
+        }else{
+            return callback(null, jobWorkingDir);
+        }
+    });
+}
+
+
 // Create a unique working directory in the global working directory from the config
 function createJobWorkDir(pbs_config, callback){
+    
     // Get configuration working directory and Generate a UID for the working dir
     var workUID = createUID();
+    
+    // Remote Working direcorty
     var jobWorkingDir = path.join(pbs_config.workingDir,workUID);
-    var sharedWorkingDir = null;
+    
     // Return a locally available job Directory
+    var mountedWorkingDir = null;
+    
+    // Can we create on the mounted Dir
+    var usedPath = jobWorkingDir;
     if (pbs_config.useSharedDir){
-        sharedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+        mountedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+        usedPath = mountedWorkingDir;
     }
-        
+     
     //Create workdir with 700 permissions
-    var process = spawnProcess(["[ -d "+jobWorkingDir+" ] || mkdir -m 700 "+jobWorkingDir],"shell", null, pbs_config);
+    var process = spawnProcess(["[ -d "+usedPath+" ] || mkdir -m 700 "+usedPath],"shell", pbs_config.useSharedDir, pbs_config);
     
     // Transmit the error if any
     if (process.stderr){
         return callback(new Error(process.stderr));
     }
     //TODO:handles error
-    return callback(null, jobWorkingDir, sharedWorkingDir);
+    return callback(null, jobWorkingDir, mountedWorkingDir);
 }
 
 
@@ -731,7 +777,7 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     
     // Send files by the copy command defined
     for (var i = 0; i < qsubArgs.length; i++){
-        var copyCmd = spawnProcess([qsubArgs[i],jobWorkingDir],"copy","send",pbs_config);
+        var copyCmd = spawnProcess([qsubArgs[i],jobWorkingDir],"copy",true,pbs_config);
         if (copyCmd.stderr){
             return callback(new Error(copyCmd.stderr.replace(/\n/g,"")));
         }
@@ -740,7 +786,7 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     var scriptName = path.basename(qsubArgs[0]);
     remote_cmd.push(scriptName);
     
-    // Chnage directory to working dir
+    // Change directory to working dir
     remote_cmd = ["cd", jobWorkingDir, "&&"].concat(remote_cmd);
     
     // Submit
@@ -757,29 +803,27 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
         });
 }
 
-// Interface to retrieve the files from a completed job
+// Interface to retrieve the files from a job
 // Takes the jobId
 /* Return {
     callack(message)
 }*/
 
 function qfind_js(pbs_config, jobId, callback){
-    
+
     // Check if the user is the owner of the job
-    qstat_js(pbs_config,jobId, function(err,data){
+    getJobWorkDir(pbs_config, jobId, function(err, jobWorkingDir){
         if(err){
-            return callback(err,data);
+            return callback(err);
         }
-        
-        // Check if the user downloads the appropriate files
-        var jobWorkingDir = path.resolve(data.Variable_List.PBS_O_WORKDIR);
         
         // Remote find command
         // TOOD: put in config file
         var remote_cmd = ["find", jobWorkingDir,"-type f", "&& find", jobWorkingDir, "-type d"];
         
         // List the content of the working dir
-        var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+        var output = spawnProcess(remote_cmd,"shell",pbs_config.useSharedDir,pbs_config);
+        
         // Transmit the error if any
         if (output.stderr){
             return callback(new Error(output.stderr.replace(/\n/g,"")));
@@ -812,28 +856,28 @@ function qfind_js(pbs_config, jobId, callback){
 
 }
 
+// Retrieve files inside a working directory of a job from a fileList with remote or locally mounted paths
 function qretrieve_js(pbs_config, jobId, fileList, localDir, callback){
     
     // Check if the user is the owner of the job
-    qstat_js(pbs_config,jobId, function(err,data){
+    getJobWorkDir(pbs_config, jobId, function(err, jobWorkingDir){
         if(err){
-            return callback(err,data);
+            return callback(err);
         }
         
-        // Check if the user downloads the appropriate files
-        var jobWorkingDir = path.resolve(data.Variable_List.PBS_O_WORKDIR);
         
         for (var file in fileList){
             var filePath = fileList[file];
             
             // Compare the file location with the working dir of the job
-            if(path.dirname(filePath) !== jobWorkingDir){
+            // Filepath is already transformed to a mounted path if available
+            if(path.relative(jobWorkingDir,filePath).indexOf('..') > -1){
                 return callback(new Error(path.basename(filePath) + ' is not related to the job ' + jobId));
             }
             
             // Retrieve the file
             // TODO: treat individual error on each file
-            var copyCmd = spawnProcess([filePath,localDir],"copy","retrieve",pbs_config);
+            var copyCmd = spawnProcess([filePath,localDir],"copy",false,pbs_config);
             if (copyCmd.stderr){
                 return callback(new Error(copyCmd.stderr.replace(/\n/g,"")));
             }
@@ -856,4 +900,5 @@ module.exports = {
     qretrieve_js        : qretrieve_js,
     qfind_js            : qfind_js,
     createJobWorkDir    : createJobWorkDir,
+    getJobWorkDir       : getJobWorkDir,
 };
