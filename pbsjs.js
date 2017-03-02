@@ -349,7 +349,7 @@ function jsonifyQueues(output){
     return results;
 }
 
-function jsonifyQstatF(output){
+function jsonifyQstatFull(output){
     var results={};
     // First line is Job Id
     results.jobId = output[0].split(':')[1].trim();
@@ -621,13 +621,17 @@ function qstat_js(pbs_config, jobId, callback){
     // Info on a specific job
     if (args.length == 1){
         jobId = args.pop();
-        // Call by short job# to avoid errors
-        if(jobId.indexOf('.') > -1){
-            jobId = jobId.split('.')[0];
-        }
+        // Qstat -f
         remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.job);
-        remote_cmd.push(jobId);
-        jobList = false;
+        // Qstat -f on all jobs
+        if(jobId !== 'all'){
+            // Call by short job# to avoid errors
+            if(jobId.indexOf('.') > -1){
+                jobId = jobId.split('.')[0];
+            }
+            remote_cmd.push(jobId);
+            jobList = false;
+        }
     }else{
         if(pbs_config.useAlternate){
             remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.jobsAlt);
@@ -649,33 +653,41 @@ function qstat_js(pbs_config, jobId, callback){
     }
     
     if (jobList){
-        output = output.stdout.split('\n');
         var jobs = [];
-        // Use the alternative format
-        if(pbs_config.useAlternate){
-            // First 5 lines are not relevant
-            for (var j = 5; j < output.length-1; j++) {
-                // First space can be truncated due to long hostnames, changing to double space
-                output[j] = output[j].replace(/^.*?\s/,function myFunction(jobname){return jobname + "  ";});
-
-                // Give some space to the status
-                output[j] = output[j].replace(/\s[A-Z]\s/,function myFunction(status){return "  " + status + "  ";});
-                //Split by double-space
-                output[j] = output[j].trim().split(/[\s]{2,}/);
-                jobs.push(jsonifyQstatAlt(output[j]));
+        if(jobId === 'all'){
+            output = output.stdout.trim().split('\n\n');
+            for (var m = 0; m < output.length; m++) {
+                output[m]  = output[m].trim().split(/\n/);
+                jobs.push(jsonifyQstatFull(output[m]));
             }
         }else{
-            // First 2 lines are not relevant
-            for (var k = 2; k < output.length-1; k++) {
-                output[k]  = output[k].trim().split(/[\s]+/);
-                jobs.push(jsonifyQstat(output[k]));
+            output = output.stdout.split('\n');
+            // Use the alternative format
+            if(pbs_config.useAlternate){
+                // First 5 lines are not relevant
+                for (var j = 5; j < output.length-1; j++) {
+                    // First space can be truncated due to long hostnames, changing to double space
+                    output[j] = output[j].replace(/^.*?\s/,function myFunction(jobname){return jobname + "  ";});
+    
+                    // Give some space to the status
+                    output[j] = output[j].replace(/\s[A-Z]\s/,function myFunction(status){return "  " + status + "  ";});
+                    //Split by double-space
+                    output[j] = output[j].trim().split(/[\s]{2,}/);
+                    jobs.push(jsonifyQstatAlt(output[j]));
+                }
+            }else{
+                // First 2 lines are not relevant
+                for (var k = 2; k < output.length-1; k++) {
+                    output[k]  = output[k].trim().split(/[\s]+/);
+                    jobs.push(jsonifyQstat(output[k]));
+                }
             }
         }
         return callback(null, jobs);
         
     }else{
         output = output.stdout.replace(/\n\t/g,"").split('\n');
-        output = jsonifyQstatF(output);
+        output = jsonifyQstatFull(output);
         return callback(null, output);
     }
 }
