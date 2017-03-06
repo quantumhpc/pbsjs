@@ -349,7 +349,7 @@ function jsonifyQueues(output){
     return results;
 }
 
-function jsonifyQstatFull(output){
+function jsonifyQstatFull(output, pbs_config){
     var results={};
     // First line is Job Id
     results.jobId = output[0].split(':')[1].trim();
@@ -378,6 +378,14 @@ function jsonifyQstatFull(output){
             variables[k] = variables[k].split('=');
             results.Variable_List[variables[k][0]] = variables[k][1];
         }
+    }
+    // Transform available paths
+    if (pbs_config.useSharedDir){
+        results.sharedPath = {
+            workdir         : getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR),
+            Error_Path      : getMountedPath(pbs_config, results.Error_Path.split(':')[1]),
+            Output_Path     : getMountedPath(pbs_config, results.Output_Path.split(':')[1])
+        };
     }
     return results;
 }
@@ -658,7 +666,7 @@ function qstat_js(pbs_config, jobId, callback){
             output = output.stdout.trim().split('\n\n');
             for (var m = 0; m < output.length; m++) {
                 output[m]  = output[m].trim().split(/\n/);
-                jobs.push(jsonifyQstatFull(output[m]));
+                jobs.push(jsonifyQstatFull(output[m], pbs_config));
             }
         }else{
             output = output.stdout.split('\n');
@@ -687,7 +695,7 @@ function qstat_js(pbs_config, jobId, callback){
         
     }else{
         output = output.stdout.replace(/\n\t/g,"").split('\n');
-        output = jsonifyQstatFull(output);
+        output = jsonifyQstatFull(output, pbs_config);
         return callback(null, output);
     }
 }
