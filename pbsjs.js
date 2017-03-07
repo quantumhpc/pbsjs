@@ -381,11 +381,14 @@ function jsonifyQstatFull(output, pbs_config){
     }
     // Transform available paths
     if (pbs_config.useSharedDir){
-        results.sharedPath = {
-            workdir         : getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR),
-            Error_Path      : getMountedPath(pbs_config, results.Error_Path.split(':')[1]),
-            Output_Path     : getMountedPath(pbs_config, results.Output_Path.split(':')[1])
-        };
+        results.sharedPath = {};
+        if(results.Variable_List.PBS_O_WORKDIR){
+            results.sharedPath.workdir      = getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR);
+        }
+        if(results.Error_Path){
+            results.sharedPath.Error_Path   = getMountedPath(pbs_config, results.Error_Path.split(':')[1]);
+            results.sharedPath.Output_Path  = getMountedPath(pbs_config, results.Output_Path.split(':')[1]);
+        }
     }
     return results;
 }
