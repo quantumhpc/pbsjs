@@ -113,6 +113,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config){
                             file    = getMountedPath(pbs_config, spawnCmd[0]);
                             destDir = spawnCmd[1];
                         }
+                        spawnCmd = [file,destDir];
                     }else{
                         spawnExec = pbs_config.scpExec;
                         if(spawnLocal){
@@ -437,9 +438,6 @@ function qscript_js(jobArgs, localPath, callback){
     
     // Job Name
     toWrite += "\n" + PBScommand + "-N " + jobName;
-    
-    // Workdir
-    // toWrite += "\n" + PBScommand + "-d " + jobArgs.workdir;
     
     // Stdout
     if (jobArgs.stdout !== undefined && jobArgs.stdout !== ''){
