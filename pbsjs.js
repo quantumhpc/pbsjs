@@ -54,7 +54,7 @@ var nodeControlCmd = {
     'offline'   :  ["-o"],
     'reset'     :  ["-r"]
 };
-
+   
 // Helper function to return an array with [full path of exec, arguments] from a command of the cmdDict
 function cmdBuilder(binPath, cmdDictElement){
     return [path.join(binPath, cmdDictElement[0])].concat(cmdDictElement.slice(1,cmdDictElement.length));
@@ -399,13 +399,13 @@ function jsonifyQstatFull(output, pbs_config){
 // Job Arguments taken in input : TO COMPLETE
 // Return the full path of the SCRIPT
 /* jobArgs = {
-    shell           :   String      //  '/bin/bash'
+    shell           :   [String]      //  '/bin/bash'
     jobName         :   String      //  'XX'
-    ressources      :   String      //  'nodes=X:ppn=X or select=X'
-    walltime        :   String      //  'walltime=01:00:00'
+    resources      :   String      //  'nodes=X:ppn=X or select=X'
+    walltime        :   [String]      //  'walltime=01:00:00'
     workdir         :   String      //  '-d'
-    stdout          :   String      //  '-o'
-    stderr          :   String      //  '-e'
+    stdout          :   [String]      //  '-o'
+    stderr          :   [String[      //  '-e'
     queue           :   String      //  'batch'
     exclusive       :   Boolean     //  '-n'
     mail            :   String      //  'myemail@mydomain.com'
@@ -433,23 +433,26 @@ function qscript_js(jobArgs, localPath, callback){
     // Generate the script path
     var scriptFullPath = path.join(localPath,jobName);
     
-    // Job Shell
-    toWrite += "\n" + PBScommand + "-S " + jobArgs.shell;
-    
+    // Job Shell: optional, default to bash
+    if (jobArgs.shell !== undefined && jobArgs.shell !== ''){
+        toWrite += "\n" + PBScommand + "-S " + jobArgs.shell;
+    }else{
+        toWrite += "\n" + PBScommand + "-S /bin/bash";
+    }
     // Job Name
     toWrite += "\n" + PBScommand + "-N " + jobName;
     
-    // Stdout
+    // Stdout: optional
     if (jobArgs.stdout !== undefined && jobArgs.stdout !== ''){
         toWrite += "\n" + PBScommand + "-o " + jobArgs.stdout;
     }
-    // Stderr
+    // Stderr: optional
     if (jobArgs.stderr !== undefined && jobArgs.stderr !== ''){
         toWrite += "\n" + PBScommand + "-e " + jobArgs.stderr;
     }
     
-    // Ressources
-    toWrite += "\n" + PBScommand + "-l " + jobArgs.ressources;
+    // Resources
+    toWrite += "\n" + PBScommand + parseResources(jobArgs.resources);
     
     // Walltime: optional
     if (jobArgs.walltime !== undefined && jobArgs.walltime !== ''){
@@ -908,6 +911,41 @@ function qretrieve_js(pbs_config, jobId, fileList, localDir, callback){
         });
     });
 
+}
+
+// Parse resources and return the qsub -l  statement
+//TODO: check against resources_available
+//TODO: Multiple chunk as Array of object => [chunk]+[chunk]
+/**
+ * {
+     chunk          :   [Int],
+     ncpus          :   [Int],
+     mpiprocs       :   [Int],
+     mem            :   [String],
+     host           :   [String],
+     arch           :   [String]
+   }
+**/
+function parseResources(resources){
+    
+    // Resources
+    var select = " -l select=";
+    
+    // Chunk: default to 1
+    if (resources.chunk !== undefined && resources.chunk !== ''){
+        select+=resources.chunk;
+        delete resources.chunk;
+    }else{
+        select+="1";
+    }
+    
+    // Loop on the rest
+    for(var res in resources){
+        if (resources[res] !== undefined && resources[res] !== ''){
+            select+=":" + res + "=" + resources[res];
+        }
+    }
+    return select;
 }
 
 module.exports = {
