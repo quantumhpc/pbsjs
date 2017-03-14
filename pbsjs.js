@@ -67,9 +67,10 @@ function cmdBuilder(binPath, cmdDictElement){
     pbs_config
 */
 // TODO: treat errors
-function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config){
+function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
     var spawnExec;
-    var spawnOpts = { encoding : 'utf8'};
+    var spawnOpts = opts || {};
+    spawnOpts.encoding = 'utf8';
     // Use UID and GID on local method
     if(pbs_config.method === "local" || pbs_config.useSharedDir){
         pbs_config.uid = Number(pbs_config.uid);
@@ -138,7 +139,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config){
     
     var spawnReturn = spawn(spawnExec, spawnCmd, spawnOpts);
     // Restart on first connect
-    if(spawnReturn.stderr.indexOf("Warning: Permanently added") > -1){
+    if(spawnReturn.stderr && spawnReturn.stderr.indexOf("Warning: Permanently added") > -1){
         return spawn(spawnExec, spawnCmd, spawnOpts);
     }else{
         return spawnReturn;
@@ -810,11 +811,8 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     var scriptName = path.basename(qsubArgs[0]);
     remote_cmd.push(scriptName);
     
-    // Change directory to working dir
-    remote_cmd = ["cd", jobWorkingDir, "&&"].concat(remote_cmd);
-    
     // Submit
-    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    var output = spawnProcess(remote_cmd,"shell",null,pbs_config, { cwd : jobWorkingDir});
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr.replace(/\n/g,"")));
