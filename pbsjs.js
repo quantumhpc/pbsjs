@@ -811,8 +811,12 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     var scriptName = path.basename(qsubArgs[0]);
     remote_cmd.push(scriptName);
     
+    // Change directory to working dir
+    remote_cmd = ["cd", jobWorkingDir, "&&"].concat(remote_cmd);
+    
     // Submit
-    var output = spawnProcess(remote_cmd,"shell",null,pbs_config, { cwd : jobWorkingDir});
+    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr.replace(/\n/g,"")));
