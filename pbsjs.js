@@ -198,23 +198,22 @@ function createJobWorkDir(pbs_config, callback){
     // Remote Working direcorty
     var jobWorkingDir = path.join(pbs_config.workingDir,workUID);
     
-    // Return a locally available job Directory
-    var mountedWorkingDir = null;
-    
-    // Can we create on the mounted Dir
-    var usedPath = jobWorkingDir;
-    if (pbs_config.useSharedDir){
-        mountedWorkingDir = path.join(pbs_config.sharedDir,workUID);
-        usedPath = mountedWorkingDir;
-    }
-     
     //Create workdir with 700 permissions
-    var process = spawnProcess(["[ -d "+usedPath+" ] || mkdir -m 700 "+usedPath],"shell", pbs_config.useSharedDir, pbs_config);
-    
+    var process = spawnProcess(["[ -d "+jobWorkingDir+" ] || mkdir -m 700 "+jobWorkingDir],"shell", pbs_config.useSharedDir, pbs_config);
+
     // Transmit the error if any
     if (process.stderr){
         return callback(new Error(process.stderr));
     }
+        
+    // Return a locally available job Directory
+    var mountedWorkingDir = null;
+    
+    // Can we create on the mounted Dir
+    if (pbs_config.useSharedDir){
+        mountedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+    }
+    
     //TODO:handles error
     return callback(null, jobWorkingDir, mountedWorkingDir);
 }
