@@ -1,0 +1,28 @@
+{
+  "name": "pbsjs",
+  "version": "1.0.0",
+  "description": "Wrapper for Altair PBS Workload Manager commands",
+  "main": "pbsjs.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quantumhpc/pbsjs.git"
+  },
+  "keywords": [
+    "PBS",
+    "Altair",
+    "Workload",
+    "Manager",
+    "Scheduling",
+    "Jobs",
+    "Batch"
+  ],
+  "author": "QUANTUM HPC Inc.",
+  "license": "AGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/quantumhpc/pbsjs/issues"
+  },
+  "homepage": "https://github.com/quantumhpc/pbsjs#readme"
+}
