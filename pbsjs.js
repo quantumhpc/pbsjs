@@ -386,7 +386,6 @@ function jsonifyQstatFull(output, pbs_config){
     }
     // Transform available paths
     if (pbs_config.useSharedDir){
-        console.log(results)
         results.sharedPath = {};
         if(results.Variable_List.PBS_O_WORKDIR){
             results.sharedPath.workdir      = getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR);
@@ -395,7 +394,6 @@ function jsonifyQstatFull(output, pbs_config){
             results.sharedPath.Error_Path   = getMountedPath(pbs_config, results.Error_Path.split(':')[1]);
             results.sharedPath.Output_Path  = getMountedPath(pbs_config, results.Output_Path.split(':')[1]);
         }
-        console.log(results.sharedPath)
     }
     return results;
 }
