@@ -160,8 +160,11 @@ function getMountedPath(pbs_config, remotePath){
     if(pbs_config.method === 'ssh' && pbs_config.useSharedDir){
         var subDir = path.relative(pbs_config.workingDir, remotePath);
         mountedPath = path.join(pbs_config.sharedDir, subDir);
-    }else{
+    }else if(pbs_config.method === 'local'){
         mountedPath = path.normalize(remotePath);
+    }else{
+        // Unavailable
+        mountedPath = null;
     }
     return mountedPath;
 }
@@ -390,10 +393,14 @@ function jsonifyQstatFull(output, pbs_config){
         if(results.Variable_List.PBS_O_WORKDIR){
             results.sharedPath.workdir      = getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR);
         }
-        if(results.Error_Path){
-            results.sharedPath.Error_Path   = getMountedPath(pbs_config, results.Error_Path.split(':')[1]);
-            results.sharedPath.Output_Path  = getMountedPath(pbs_config, results.Output_Path.split(':')[1]);
-        }
+        ['Error_Path', 'Output_Path'].forEach(function(_path){
+            if(results[_path]){
+                if(results[_path].indexOf(':') > -1){
+                    results[_path] = results[_path].split(':')[1];
+                }
+                results[_path] = getMountedPath(pbs_config, results[_path]);
+            }
+        });
     }
     return results;
 }
