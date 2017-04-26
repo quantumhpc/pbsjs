@@ -201,21 +201,25 @@ function createJobWorkDir(pbs_config, callback){
     
     // Remote Working direcorty
     var jobWorkingDir = path.join(pbs_config.workingDir,workUID);
-    
-    //Create workdir with 700 permissions
-    var process = spawnProcess(["[ -d "+jobWorkingDir+" ] || mkdir -m 700 "+jobWorkingDir],"shell", pbs_config.useSharedDir, pbs_config);
 
-    // Transmit the error if any
-    if (process.stderr){
-        return callback(new Error(process.stderr));
-    }
-        
     // Return a locally available job Directory
     var mountedWorkingDir = null;
     
     // Can we create on the mounted Dir
+    var usedDir;
     if (pbs_config.useSharedDir){
         mountedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+        usedDir = mountedWorkingDir;
+    }else{
+        usedDir = jobWorkingDir;
+    }
+    
+    //Create workdir with 700 permissions
+    var process = spawnProcess(["[ -d "+usedDir+" ] || mkdir -m 700 "+usedDir],"shell", pbs_config.useSharedDir, pbs_config);
+
+    // Transmit the error if any
+    if (process.stderr){
+        return callback(new Error(process.stderr));
     }
     
     //TODO:handles error
@@ -393,6 +397,7 @@ function jsonifyQstatFull(output, pbs_config){
         if(results.Variable_List.PBS_O_WORKDIR){
             results.sharedPath.workdir      = getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR);
         }
+        //TODO: running jobs have their stdout and stderr in the staging directory: have an option for sandbox
         ['Error_Path', 'Output_Path'].forEach(function(_path){
             if(results[_path]){
                 if(results[_path].indexOf(':') > -1){
