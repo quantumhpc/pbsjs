@@ -398,7 +398,8 @@ function jsonifyQstatFull(output, pbs_config){
             results.sharedPath.workdir      = getMountedPath(pbs_config, results.Variable_List.PBS_O_WORKDIR);
         }
         //TODO: running jobs have their stdout and stderr in the staging directory: have an option for sandbox
-        ['Error_Path', 'Output_Path'].forEach(function(_path){
+        var stdPath = ['Error_Path', 'Output_Path'];
+        stdPath.forEach(function(_path){
             if(results[_path]){
                 if(results[_path].indexOf(':') > -1){
                     results[_path] = results[_path].split(':')[1];
