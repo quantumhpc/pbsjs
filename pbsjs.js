@@ -518,13 +518,19 @@ function qscript_js(jobArgs, localPath, callback){
     toWrite += lineBreak + jobArgs.commands;
     
     toWrite += lineBreak;
-    // Write to script
-    fs.writeFileSync(scriptFullPath,toWrite);
+    // Write to script, delete file if exists
+    fs.unlink(scriptFullPath, function(err){
+        // Ignore error if no file
+        if (err && err.code !== 'ENOENT'){
+            return callback(new Error("Cannot remove the existing file."));
+        }
+        fs.writeFileSync(scriptFullPath,toWrite);
     
-    return callback(null, {
-        "message"   :   'Script for job ' + jobName + ' successfully created',
-        "path"      :   scriptFullPath
+        return callback(null, {
+            "message"   :   'Script for job ' + jobName + ' successfully created',
+            "path"      :   scriptFullPath
         });
+    });
 }
 
 // Return the list of nodes
@@ -825,9 +831,12 @@ function qsub_js(pbs_config, qsubArgs, jobWorkingDir, callback){
     
     // Send files by the copy command defined
     for (var i = 0; i < qsubArgs.length; i++){
-        var copyCmd = spawnProcess([qsubArgs[i],jobWorkingDir],"copy",true,pbs_config);
-        if (copyCmd.stderr){
-            return callback(new Error(copyCmd.stderr.replace(/\n/g,"")));
+        // Copy only different files
+        if(path.normalize(qsubArgs[i]) !== path.join(jobWorkingDir, path.basename(qsubArgs[i]))){
+            var copyCmd = spawnProcess([qsubArgs[i],jobWorkingDir],"copy",true,pbs_config);
+            if (copyCmd.stderr){
+                return callback(new Error(copyCmd.stderr.replace(/\n/g,"")));
+            }
         }
     }
     // Add script: first element of qsubArgs
