@@ -949,7 +949,6 @@ function qretrieve_js(pbs_config, jobId, fileList, localDir, callback){
 
 // Parse resources and return the qsub -l  statement
 //TODO: check against resources_available
-//TODO: Multiple chunk as Array of object => [chunk]+[chunk]
 /**
  * {
      chunk          :   [Int],
@@ -961,22 +960,30 @@ function qretrieve_js(pbs_config, jobId, fileList, localDir, callback){
    }
 **/
 function parseResources(resources){
-    
     // Resources
     var select = " -l select=";
     
-    // Chunk: default to 1
-    if (resources.chunk !== undefined && resources.chunk !== ''){
-        select+=resources.chunk;
-        delete resources.chunk;
-    }else{
-        select+="1";
+    if(!(Array.isArray(resources))){
+        resources = [resources];
     }
     
-    // Loop on the rest
-    for(var res in resources){
-        if (resources[res] !== undefined && resources[res] !== ''){
-            select+=":" + res + "=" + resources[res];
+    for(var statement in resources){
+        if(statement>0){
+            select+="+";
+        }
+        // Chunk: default to 1
+        if (resources[statement].chunk !== undefined && resources[statement].chunk !== ''){
+            select+=resources[statement].chunk;
+            delete resources[statement].chunk;
+        }else{
+            select+="1";
+        }
+        
+        // Loop on the rest
+        for(var res in resources[statement]){
+            if (resources[statement][res] !== undefined && resources[statement][res] !== ''){
+                select+=":" + res + "=" + resources[statement][res];
+            }
         }
     }
     return select;
