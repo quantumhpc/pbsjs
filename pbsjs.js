@@ -477,8 +477,10 @@ function qscript(jobArgs, localPath, callback){
         toWrite += lineBreak + PBScommand + "-l " + jobArgs.walltime;
     }
     
-    // Queue
-    toWrite += lineBreak +  PBScommand + "-q " + jobArgs.queue;
+    // Queue: none fallback to default
+    if (jobArgs.queue !== undefined && jobArgs.queue !== ''){
+        toWrite += lineBreak +  PBScommand + "-q " + jobArgs.queue;
+    }
     
     // Job exclusive
     if (jobArgs.exclusive){
