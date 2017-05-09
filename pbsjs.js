@@ -534,7 +534,7 @@ function qscript(jobArgs, localPath, callback){
 }
 
 // Return the list of nodes
-function qnodes_js(pbs_config, controlCmd, nodeName, callback){
+function qnodes(pbs_config, controlCmd, nodeName, callback){
     // controlCmd & nodeName are optionnal so we test on the number of args
     var args = [];
     for (var i = 0; i < arguments.length; i++) {
@@ -990,7 +990,7 @@ function parseResources(resources){
 }
 
 module.exports = {
-    qnodes_js           : qnodes_js,
+    qnodes              : qnodes,
     qstat               : qstat,
     qqueues             : qqueues,
     qmgr                : qmgr,
