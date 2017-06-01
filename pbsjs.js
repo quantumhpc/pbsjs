@@ -44,8 +44,8 @@ var cmdDict = {
     "jobsAlt"  :   ["qstat", "-x", "-w", "-s", "-1"],
     "node"     :   ["pbsnodes"],
     "nodes"    :   ["pbsnodes", "-a"],
+    "move"     :   ["qmove"],
     "submit"   :   ["qsub"],
-    "delete"   :   ["qdel"],
     "setting"  :   ["qmgr", "-c"],
     "settings" :   ["qmgr", "-c","'p s'"]
     };
@@ -55,7 +55,15 @@ var nodeControlCmd = {
     'offline'   :  ["-o"],
     'reset'     :  ["-r"]
 };
-   
+
+var qActions = {
+    qrun    :   "forced to run",
+    qrerun  :   "successfully requeued",
+    qdel    :   "successfully cancelled",
+    qhold   :   "successfully put on hold",
+    qrls    :   "successfully released",
+};
+
 // Helper function to return an array with [full path of exec, arguments] from a command of the cmdDict
 function cmdBuilder(binPath, cmdDictElement){
     return [path.join(binPath, cmdDictElement[0])].concat(cmdDictElement.slice(1,cmdDictElement.length));
@@ -736,41 +744,6 @@ function qstat(pbs_config, jobId, callback){
     }
 }
 
-// Interface for qdel
-// Delete the specified job Id and return the message and the status code
-function qdel(pbs_config,jobId,callback){
-    // JobId is optionnal so we test on the number of args
-    var args = [];
-    for (var i = 0; i < arguments.length; i++) {
-        args.push(arguments[i]);
-    }
-
-    // first argument is the config file
-    pbs_config = args.shift();
-
-    // last argument is the callback function
-    callback = args.pop();
-    
-    var remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.delete);
-    
-    if (args.length !== 1){
-        // Return an error
-        return callback(new Error('Please specify the jobId'));
-    }else{
-        jobId = args.pop();
-        remote_cmd.push(jobId);
-    }
-    
-    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
-    
-    // Transmit the error if any
-    if (output.stderr){
-        return callback(new Error(output.stderr));
-    }
-    // Job deleted returns
-    return callback(null, {"message" : 'Job ' + jobId + ' successfully deleted'});
-}
-
 // Interface for qmgr
 // For now only display server info
 function qmgr(pbs_config, qmgrCmd, callback){
@@ -870,7 +843,6 @@ function qsub(pbs_config, qsubArgs, jobWorkingDir, callback){
 }*/
 
 function qfind(pbs_config, jobId, callback){
-
     // Check if the user is the owner of the job
     getJobWorkDir(pbs_config, jobId, function(err, jobWorkingDir){
         if(err){
@@ -991,12 +963,12 @@ function parseResources(resources){
     return select;
 }
 
-module.exports = {
+// Main functions
+var modules = {
     qnodes              : qnodes,
     qstat               : qstat,
     qqueues             : qqueues,
     qmgr                : qmgr,
-    qdel                : qdel,
     qsub                : qsub,
     qscript             : qscript,
     qretrieve           : qretrieve,
@@ -1004,3 +976,40 @@ module.exports = {
     createJobWorkDir    : createJobWorkDir,
     getJobWorkDir       : getJobWorkDir,
 };
+
+/** Common interface for simple functions only taking a jobId to control a job**/
+function qFn(action, msg, pbs_config, jobId, callback){
+    var remote_cmd = cmdBuilder(pbs_config.binariesDir, [action]);
+    remote_cmd.push(jobId);
+    
+    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
+    if (output.stderr){
+        return callback(new Error(output.stderr));
+    }
+    // Job deleted returns
+    return callback(null, {"message" : 'Job ' + jobId + ' ' + msg});
+}
+
+/** Declare simple wrapper functions
+ * qdel     :       Delete the specified job Id and return the message and the status code
+ * qhold   :
+ * qrls     :
+ * **/
+var declareFn = function(_f){
+    modules[fn] = function(){
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift(qActions[_f]);
+        args.unshift(_f);
+        return qFn.apply(this, args);
+    };
+};
+
+for(var fn in qActions){
+    declareFn(fn);
+}
+
+// Main export
+module.exports = modules;
+
+
