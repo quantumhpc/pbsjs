@@ -653,8 +653,23 @@ function qqueues(pbs_config, queueName, callback){
     
 }
     
+// Move the job to a different queue
+function qmove(pbs_config, jobId, destination, callback){
+    
+    var remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.move);
+    remote_cmd.push(destination);
+    remote_cmd.push(jobId);
+    
+    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
+    if (output.stderr){
+        return callback(new Error(output.stderr));
+    }
+    // Job deleted returns
+    return callback(null, {"message" : 'Job ' + jobId + ' successfully moved to queue ' + destination});
+}
+
 // Return list of running jobs
-// TODO: implement qstat -f
 function qstat(pbs_config, jobId, callback){
     // JobId is optionnal so we test on the number of args
     var args = [];
@@ -968,6 +983,7 @@ var modules = {
     qnodes              : qnodes,
     qstat               : qstat,
     qqueues             : qqueues,
+    qmove               : qmove,
     qmgr                : qmgr,
     qsub                : qsub,
     qscript             : qscript,
