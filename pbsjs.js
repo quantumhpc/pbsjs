@@ -37,6 +37,7 @@ var jobStatus = {
 
 // General command dictionnary keeping track of implemented features
 var cmdDict = {
+    "alter"    :   ["qalter"],
     "queue"    :   ["qstat", "-Q"],
     "queues"   :   ["qstat", "-Q"],
     "job"      :   ["qstat", "-x", "-f"],
@@ -851,6 +852,47 @@ function qsub(pbs_config, qsubArgs, jobWorkingDir, callback){
         });
 }
 
+// Interface for qalter
+// Modify job parameters inline
+// qalter(
+/*    
+        pbs_config      :   config,
+        jobId           :   jobId,
+        jobSettings     :  {
+            jobName     :   string
+            priority    :   -1024 < n < 1023
+        },
+        callack(err, success)
+}
+*/
+function qalter(pbs_config, jobId, jobSettings, callback){
+    var remote_cmd = cmdBuilder(pbs_config.binariesDir, cmdDict.alter);
+    
+    // Job name
+    if(jobSettings.jobName){
+        remote_cmd.push('-N');
+        remote_cmd.push(jobSettings.jobName);
+    }
+    // Priority
+    if(jobSettings.priority){
+        // Parse number
+        jobSettings.priority = Math.max(Math.min(Number(jobSettings.priority), 1023), -1024);
+        remote_cmd.push('-p');
+        remote_cmd.push(jobSettings.priority);
+    }
+    remote_cmd.push(jobId);
+    
+    // Submit
+    var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
+    // Transmit the error if any
+    if (output.stderr){
+        return callback(new Error(output.stderr.replace(/\n/g,"")));
+    }
+    
+    return callback(null, 'Job ' + jobId + ' successfully altered');
+}
+
 // Interface to retrieve the files from a job
 // Takes the jobId
 /* Return {
@@ -986,6 +1028,7 @@ var modules = {
     qmove               : qmove,
     qmgr                : qmgr,
     qsub                : qsub,
+    qalter              : qalter,
     qscript             : qscript,
     qretrieve           : qretrieve,
     qfind               : qfind,
