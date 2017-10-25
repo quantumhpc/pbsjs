@@ -13,5 +13,6 @@
         "useSharedDir"          : false,
         "sharedDir"             : "/localMount",
         "useAlternate"          : true,
-        "workingDir"            : "/tmp"
-};
+        "workingDir"            : "/tmp",
+        "permissions"           : 700
+}

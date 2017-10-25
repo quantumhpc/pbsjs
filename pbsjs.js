@@ -124,7 +124,11 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                             file    = getMountedPath(pbs_config, spawnCmd[0]);
                             destDir = spawnCmd[1];
                         }
-                        spawnCmd = [file,destDir];
+                        // Fail-safe for same-file copy
+                        if(file === path.join(destDir, path.basename(file))){
+                            return true;
+                        }
+                        spawnCmd = [quotes(file),quotes(destDir)];
                     }else{
                         spawnExec = pbs_config.scpExec;
                         if(spawnLocal){
@@ -134,7 +138,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                             file    = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[0];
                             destDir = spawnCmd[1];
                         }
-                        spawnCmd = ["-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey,file,destDir];
+                        spawnCmd = ["-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey,quotes(file),quotes(destDir)];
                     }
                     break;
                 case "local":
@@ -142,6 +146,9 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                     spawnOpts.shell = pbs_config.localShell;
                     spawnOpts.uid = pbs_config.uid;
                     spawnOpts.gid = pbs_config.gid;
+                    file        = spawnCmd[0];
+                    destDir     = spawnCmd[1];
+                    spawnCmd    = [quotes(file),quotes(destDir)];
                     break;
             }
             break;
@@ -156,7 +163,12 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
     }
 }
 
-function createUID()
+function quotes(text){
+    return "\"" + text + "\"";
+}
+
+// Takes an optional text as part of the UID
+function createUID(text)
 {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
@@ -203,13 +215,31 @@ function getJobWorkDir(pbs_config, jobId, callback){
 
 
 // Create a unique working directory in the global working directory from the config
-function createJobWorkDir(pbs_config, callback){
+// Takes an optional text for the name of the working directory
+function createJobWorkDir(pbs_config, workdirName, callback){
+        
+    var args = [];
+    for (var i = 0; i < arguments.length; i++) {
+        args.push(arguments[i]);
+    }
+
+    // first argument is the config file
+    pbs_config = args.shift();
+
+    // last argument is the callback function
+    callback = args.pop();
     
-    // Get configuration working directory and Generate a UID for the working dir
-    var workUID = createUID();
+    var workDir;
+    if(args.length === 1){
+        // Takes a string to create the working directory
+        workDir = args.pop();
+    }else{
+        // Generate a UID for the working dir
+        workDir = createUID();
+    }
     
     // Remote Working direcorty
-    var jobWorkingDir = path.join(pbs_config.workingDir,workUID);
+    var jobWorkingDir = path.join(pbs_config.workingDir,workDir);
 
     // Return a locally available job Directory
     var mountedWorkingDir = null;
@@ -217,15 +247,21 @@ function createJobWorkDir(pbs_config, callback){
     // Can we create on the mounted Dir
     var usedDir;
     if (pbs_config.useSharedDir){
-        mountedWorkingDir = path.join(pbs_config.sharedDir,workUID);
+        mountedWorkingDir = path.join(pbs_config.sharedDir,workDir);
         usedDir = mountedWorkingDir;
     }else{
         usedDir = jobWorkingDir;
     }
     
+    var chmod = "";
+    // Special permissions on working folder
+    if(pbs_config.permissions){
+        chmod = "-m " + pbs_config.permissions + " ";
+    }
+    
     //Create workdir with 700 permissions
-    var process = spawnProcess(["[ -d "+usedDir+" ] || mkdir -m 700 "+usedDir],"shell", pbs_config.useSharedDir, pbs_config);
-
+    var process = spawnProcess(["[ -d "+usedDir+" ] || mkdir " + chmod + usedDir],"shell", pbs_config.useSharedDir, pbs_config);
+    
     // Transmit the error if any
     if (process.stderr){
         return callback(new Error(process.stderr));
@@ -1034,6 +1070,7 @@ var modules = {
     qfind               : qfind,
     createJobWorkDir    : createJobWorkDir,
     getJobWorkDir       : getJobWorkDir,
+    getMountedPath      : getMountedPath,
 };
 
 /** Common interface for simple functions only taking a jobId to control a job**/
