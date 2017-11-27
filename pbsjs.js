@@ -463,7 +463,19 @@ function jsonifyQstatFull(output, pbs_config){
 /* jobArgs = {
     shell           :   [String]      //  '/bin/bash'
     jobName         :   String      //  'XX'
-    resources      :   String      //  'nodes=X:ppn=X or select=X'
+    resources      :    [{
+         chunk          :   [Int],
+         ncpus          :   [Int],
+         mpiprocs       :   [Int],
+         mem            :   [String],
+         host           :   [String],
+         arch           :   [String]
+       },{chunk},{...}],
+    custom          :   {
+        custom1     :   [Int],
+        custom2     :   [Int],
+        custom3     :   [Int]
+    }
     walltime        :   [String]      //  'walltime=01:00:00'
     workdir         :   String      //  '-d'
     stdout          :   [String]      //  '-o'
@@ -517,6 +529,12 @@ function qscript(jobArgs, localPath, callback){
     // Resources
     toWrite += lineBreak + PBScommand + parseResources(jobArgs.resources);
     
+    // Custom Resources
+    if(jobArgs.custom){
+        for(var customRes in jobArgs.custom){
+            toWrite += lineBreak + PBScommand + "-l " + customRes + "=" + jobArgs.custom[customRes];
+        }
+    }
     // Walltime: optional
     if (jobArgs.walltime !== undefined && jobArgs.walltime !== ''){
         toWrite += lineBreak + PBScommand + "-l " + jobArgs.walltime;
@@ -544,7 +562,7 @@ function qscript(jobArgs, localPath, callback){
     // Send mail
     if (jobArgs.mail){
     
-    toWrite += lineBreak + PBScommand + "-M " + jobArgs.mail;
+        toWrite += lineBreak + PBScommand + "-M " + jobArgs.mail;
     
         // Test when to send a mail
         var mailArgs;
@@ -565,19 +583,20 @@ function qscript(jobArgs, localPath, callback){
     toWrite += lineBreak + jobArgs.commands;
     
     toWrite += lineBreak;
+    console.log(toWrite)
     // Write to script, delete file if exists
-    fs.unlink(scriptFullPath, function(err){
-        // Ignore error if no file
-        if (err && err.code !== 'ENOENT'){
-            return callback(new Error("Cannot remove the existing file."));
-        }
-        fs.writeFileSync(scriptFullPath,toWrite);
+    // fs.unlink(scriptFullPath, function(err){
+    //     // Ignore error if no file
+    //     if (err && err.code !== 'ENOENT'){
+    //         return callback(new Error("Cannot remove the existing file."));
+    //     }
+    //     fs.writeFileSync(scriptFullPath,toWrite);
     
-        return callback(null, {
-            "message"   :   'Script for job ' + jobName + ' successfully created',
-            "path"      :   scriptFullPath
-        });
-    });
+    //     return callback(null, {
+    //         "message"   :   'Script for job ' + jobName + ' successfully created',
+    //         "path"      :   scriptFullPath
+    //     });
+    // });
 }
 
 // Return the list of nodes
@@ -1028,7 +1047,7 @@ function qretrieve(pbs_config, jobId, fileList, localDir, callback){
 **/
 function parseResources(resources){
     // Resources
-    var select = " -l select=";
+    var select = "-l select=";
     
     if(!(Array.isArray(resources))){
         resources = [resources];
