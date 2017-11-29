@@ -583,20 +583,19 @@ function qscript(jobArgs, localPath, callback){
     toWrite += lineBreak + jobArgs.commands;
     
     toWrite += lineBreak;
-    console.log(toWrite)
     // Write to script, delete file if exists
-    // fs.unlink(scriptFullPath, function(err){
-    //     // Ignore error if no file
-    //     if (err && err.code !== 'ENOENT'){
-    //         return callback(new Error("Cannot remove the existing file."));
-    //     }
-    //     fs.writeFileSync(scriptFullPath,toWrite);
+    fs.unlink(scriptFullPath, function(err){
+        // Ignore error if no file
+        if (err && err.code !== 'ENOENT'){
+            return callback(new Error("Cannot remove the existing file."));
+        }
+        fs.writeFileSync(scriptFullPath,toWrite);
     
-    //     return callback(null, {
-    //         "message"   :   'Script for job ' + jobName + ' successfully created',
-    //         "path"      :   scriptFullPath
-    //     });
-    // });
+        return callback(null, {
+            "message"   :   'Script for job ' + jobName + ' successfully created',
+            "path"      :   scriptFullPath
+        });
+    });
 }
 
 // Return the list of nodes
