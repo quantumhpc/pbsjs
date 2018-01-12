@@ -100,7 +100,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                 spawnOpts.gid = pbs_config.gid;
             }else{
                 spawnExec = pbs_config.sshExec;
-                spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey].concat(spawnCmd);
+                spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-i",pbs_config.secretAccessKey].concat(pbs_config.defaultOpts.split(' ')).concat(spawnCmd);
             }
             break;
         //Copy the files according to the spawnCmd array : 0 is the file, 1 is the destination dir
@@ -138,7 +138,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                             file    = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[0];
                             destDir = spawnCmd[1];
                         }
-                        spawnCmd = ["-o","StrictHostKeyChecking=no","-i",pbs_config.secretAccessKey,quotes(file),quotes(destDir)];
+                        spawnCmd = pbs_config.defaultOpts.split(' ').concat(["-i",pbs_config.secretAccessKey,quotes(file),quotes(destDir)]);
                     }
                     break;
                 case "local":
@@ -638,6 +638,7 @@ function qnodes(pbs_config, controlCmd, nodeName, callback){
     }
     
     var output = spawnProcess(remote_cmd,"shell",null,pbs_config);
+    
     // Transmit the error if any
     if (output.stderr){
         return callback(new Error(output.stderr));
