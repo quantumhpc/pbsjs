@@ -449,7 +449,7 @@ function jsonifyQstatFull(output, pbs_config){
                 if(results[_path].indexOf(':') > -1){
                     results[_path] = results[_path].split(':')[1];
                 }
-                results[_path] = getMountedPath(pbs_config, results[_path]);
+                results.sharedPath[_path] = getMountedPath(pbs_config, results[_path]);
             }
         });
     }
