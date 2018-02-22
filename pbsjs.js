@@ -1060,14 +1060,13 @@ function parseResources(resources){
         // Chunk: default to 1
         if (resources[statement].chunk !== undefined && resources[statement].chunk !== ''){
             select+=resources[statement].chunk;
-            delete resources[statement].chunk;
         }else{
             select+="1";
         }
         
         // Loop on the rest
         for(var res in resources[statement]){
-            if (resources[statement][res] !== undefined && resources[statement][res] !== ''){
+            if (res !== "chunk" && resources[statement][res] !== undefined && resources[statement][res] !== ''){
                 select+=":" + res + "=" + resources[statement][res];
             }
         }
