@@ -81,14 +81,17 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
     var spawnExec;
     var spawnOpts = opts || {};
     spawnOpts.encoding = 'utf8';
-    // Use UID and GID on local method
-    if(pbs_config.method === "local" || pbs_config.useSharedDir){
+    // Use UID and GID on local method, Windows does not support UID/GID
+    if((!/^win/.test(process.platform)) && (pbs_config.method === "local" || pbs_config.useSharedDir || spawnLocal)){
         pbs_config.uid = Number(pbs_config.uid);
         pbs_config.gid = Number(pbs_config.gid);
         // UID and GID throw a core dump if not correct numbers
         if ( isNaN(pbs_config.uid) || isNaN(pbs_config.gid) ) {
             return {stderr : "Please specify valid uid/gid"};
-        } 
+        }else{
+            spawnOpts.uid = pbs_config.uid;
+            spawnOpts.gid = pbs_config.gid;
+        }
     }
     switch (spawnType){
         case "shell":
@@ -96,8 +99,6 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
             if(pbs_config.method === "local" || spawnLocal){
                 spawnExec = spawnCmd.shift();
                 spawnOpts.shell = pbs_config.localShell;
-                spawnOpts.uid = pbs_config.uid;
-                spawnOpts.gid = pbs_config.gid;
             }else{
                 spawnExec = pbs_config.sshExec;
                 spawnCmd = [pbs_config.username + "@" + pbs_config.serverName,"-i",pbs_config.secretAccessKey].concat(pbs_config.defaultOpts.split(' ')).concat(spawnCmd);
@@ -114,8 +115,6 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                     if (pbs_config.useSharedDir){
                         spawnExec = pbs_config.localCopy;
                         spawnOpts.shell = pbs_config.localShell;
-                        spawnOpts.uid = pbs_config.uid;
-                        spawnOpts.gid = pbs_config.gid;
                         // Replace the remote working dir by the locally mounted folder
                         if(spawnLocal){
                             file    = spawnCmd[0];
@@ -144,8 +143,6 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                 case "local":
                     spawnExec = pbs_config.localCopy;
                     spawnOpts.shell = pbs_config.localShell;
-                    spawnOpts.uid = pbs_config.uid;
-                    spawnOpts.gid = pbs_config.gid;
                     file        = spawnCmd[0];
                     destDir     = spawnCmd[1];
                     spawnCmd    = [quotes(file),quotes(destDir)];
@@ -153,14 +150,16 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
             }
             break;
     }
-    
     var spawnReturn = spawn(spawnExec, spawnCmd, spawnOpts);
-    // Restart on first connect
-    if(spawnReturn.stderr && spawnReturn.stderr.indexOf("Warning: Permanently added") > -1){
-        return spawn(spawnExec, spawnCmd, spawnOpts);
-    }else{
-        return spawnReturn;
+    if(spawnReturn.stderr){
+        // Restart on first connect
+        if(spawnReturn.stderr.indexOf("Warning: Permanently added") > -1){
+            return spawn(spawnExec, spawnCmd, spawnOpts);
+        }else{
+            spawnReturn.error = spawnReturn.stderr;
+        }
     }
+    return spawnReturn;
 }
 
 function quotes(text){
