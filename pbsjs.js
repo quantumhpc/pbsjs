@@ -81,6 +81,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
     var spawnExec;
     var spawnOpts = opts || {};
     spawnOpts.encoding = 'utf8';
+    spawnOpts.timeout = 5000;
     // Use UID and GID on local method, Windows does not support UID/GID
     if((!/^win/.test(process.platform)) && (pbs_config.method === "local" || pbs_config.useSharedDir || spawnLocal)){
         pbs_config.uid = Number(pbs_config.uid);
@@ -214,8 +215,8 @@ function getJobWorkDir(pbs_config, jobId, callback){
 
 
 // Create a unique working directory in the global working directory from the config
-// Takes an optional text for the name of the working directory
-function createJobWorkDir(pbs_config, workdirName, callback){
+// Takes an optional text or base path for the name of the working directory
+function createJobWorkDir(pbs_config, folder, callback){
         
     var args = [];
     for (var i = 0; i < arguments.length; i++) {
@@ -228,17 +229,15 @@ function createJobWorkDir(pbs_config, workdirName, callback){
     // last argument is the callback function
     callback = args.pop();
     
-    var workDir;
     if(args.length === 1){
         // Takes a string to create the working directory
-        workDir = args.pop();
+        folder = args.pop();
     }else{
         // Generate a UID for the working dir
-        workDir = createUID();
+        folder = createUID();
     }
     
-    // Remote Working direcorty
-    var jobWorkingDir = path.join(pbs_config.workingDir,workDir);
+    var jobWorkingDir = path.join(pbs_config.workingDir, folder);
 
     // Return a locally available job Directory
     var mountedWorkingDir = null;
@@ -246,7 +245,7 @@ function createJobWorkDir(pbs_config, workdirName, callback){
     // Can we create on the mounted Dir
     var usedDir;
     if (pbs_config.useSharedDir){
-        mountedWorkingDir = path.join(pbs_config.sharedDir,workDir);
+        mountedWorkingDir = path.join(pbs_config.sharedDir, folder);
         usedDir = mountedWorkingDir;
     }else{
         usedDir = jobWorkingDir;
