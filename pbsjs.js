@@ -80,6 +80,9 @@ function cmdBuilder(binPath, cmdDictElement){
 function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
     var spawnExec;
     var spawnOpts = opts || {};
+    if(!pbs_config.defaultOpts){
+        pbs_config.defaultOpts = '';
+    }
     spawnOpts.encoding = 'utf8';
     spawnOpts.timeout = 5000;
     // Use UID and GID on local method, Windows does not support UID/GID
@@ -138,7 +141,7 @@ function spawnProcess(spawnCmd, spawnType, spawnLocal, pbs_config, opts){
                             file    = pbs_config.username + "@" + pbs_config.serverName + ":" + spawnCmd[0];
                             destDir = spawnCmd[1];
                         }
-                        spawnCmd = pbs_config.defaultOpts.split(' ').concat(["-i",pbs_config.secretAccessKey,quotes(file),quotes(destDir)]);
+                        spawnCmd = pbs_config.defaultOpts.split(' ').concat(["-i",pbs_config.secretAccessKey,file,destDir]);
                     }
                     break;
                 case "local":

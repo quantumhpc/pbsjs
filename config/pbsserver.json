@@ -1,6 +1,7 @@
 {
         "method"                : "ssh",
         "sshExec"               : "/usr/bin/ssh",
+        "defaultOpts"           : "-o StrictHostKeyChecking=no",
         "scpExec"               : "/usr/bin/scp",
         "username"              : "user",
         "uid"                   : "10000",
