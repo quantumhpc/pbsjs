@@ -1,7 +1,7 @@
 var hpc = require("../hpc_exec_wrapper");
 var fs = require("fs");
 var path = require("path");
-var lineBreak = '\n';
+var os = require("os");
 var jobStatus = {
     'B' : 'Begun', 
     'E' : 'Exiting', 
@@ -220,7 +220,7 @@ function jsonifyQueues(output){
 
 function jsonifyQstatFull(output, pbs_config){
     //Join truncated lines and split
-    output = output.trim().replace(/\n\t/g,"").split(lineBreak);
+    output = output.trim().replace(/\n\t/g,"").split(os.EOL);
     
     var results={};
     // First line is Job Id
@@ -325,44 +325,44 @@ function qscript(jobArgs, localPath, callback){
     
     // Job Shell: optional, default to bash
     if (jobArgs.shell !== undefined && jobArgs.shell !== ''){
-        toWrite += lineBreak + PBScommand + "-S " + jobArgs.shell;
+        toWrite += os.EOL + PBScommand + "-S " + jobArgs.shell;
     }else{
-        toWrite += lineBreak + PBScommand + "-S /bin/bash";
+        toWrite += os.EOL + PBScommand + "-S /bin/bash";
     }
     // Job Name
-    toWrite += lineBreak + PBScommand + "-N " + jobName;
+    toWrite += os.EOL + PBScommand + "-N " + jobName;
     
     // Stdout: optional
     if (jobArgs.stdout !== undefined && jobArgs.stdout !== ''){
-        toWrite += lineBreak + PBScommand + "-o " + jobArgs.stdout;
+        toWrite += os.EOL + PBScommand + "-o " + jobArgs.stdout;
     }
     // Stderr: optional
     if (jobArgs.stderr !== undefined && jobArgs.stderr !== ''){
-        toWrite += lineBreak + PBScommand + "-e " + jobArgs.stderr;
+        toWrite += os.EOL + PBScommand + "-e " + jobArgs.stderr;
     }
     
     // Resources
-    toWrite += lineBreak + PBScommand + parseResources(jobArgs.resources);
+    toWrite += os.EOL + PBScommand + parseResources(jobArgs.resources);
     
     // Custom Resources
     if(jobArgs.custom){
         for(var customRes in jobArgs.custom){
-            toWrite += lineBreak + PBScommand + "-l " + customRes + "=" + jobArgs.custom[customRes];
+            toWrite += os.EOL + PBScommand + "-l " + customRes + "=" + jobArgs.custom[customRes];
         }
     }
     // Walltime: optional
     if (jobArgs.walltime !== undefined && jobArgs.walltime !== ''){
-        toWrite += lineBreak + PBScommand + "-l " + jobArgs.walltime;
+        toWrite += os.EOL + PBScommand + "-l " + jobArgs.walltime;
     }
     
     // Queue: none fallback to default
     if (jobArgs.queue !== undefined && jobArgs.queue !== ''){
-        toWrite += lineBreak +  PBScommand + "-q " + jobArgs.queue;
+        toWrite += os.EOL +  PBScommand + "-q " + jobArgs.queue;
     }
     
     // Job exclusive
     if (jobArgs.exclusive){
-        toWrite += lineBreak + PBScommand + "-n";
+        toWrite += os.EOL + PBScommand + "-n";
     }
     
     
@@ -370,14 +370,14 @@ function qscript(jobArgs, localPath, callback){
     if(jobArgs.env){
         for(var _env in jobArgs.env){
             //Quote to avoid breaks
-            toWrite += lineBreak + PBScommand + '-v "' + _env + '=' + jobArgs.env[_env] + '", ';
+            toWrite += os.EOL + PBScommand + '-v "' + _env + '=' + jobArgs.env[_env] + '", ';
         }
     }
     
     // Send mail
     if (jobArgs.mail){
     
-        toWrite += lineBreak + PBScommand + "-M " + jobArgs.mail;
+        toWrite += os.EOL + PBScommand + "-M " + jobArgs.mail;
     
         // Test when to send a mail
         var mailArgs;
@@ -390,14 +390,14 @@ function qscript(jobArgs, localPath, callback){
         }
         
         if (mailArgs){
-            toWrite += lineBreak + PBScommand + mailArgs;
+            toWrite += os.EOL + PBScommand + mailArgs;
         }
     }
     
     // Write commands in plain shell including carriage returns
-    toWrite += lineBreak + jobArgs.commands;
+    toWrite += os.EOL + jobArgs.commands;
     
-    toWrite += lineBreak;
+    toWrite += os.EOL;
     // Write to script, delete file if exists
     fs.unlink(scriptFullPath, function(err){
         // Ignore error if no file
@@ -467,7 +467,7 @@ function qnodes(pbs_config, controlCmd, nodeName, callback){
         //Detect empty values
         output = output.stdout.replace(/=,/g,"=null,");
         //Separate each node
-        output = output.split(lineBreak + lineBreak);
+        output = output.split(os.EOL + os.EOL);
         var nodes = [];
         //Loop on each node
         for (var j = 0; j < output.length; j++) {
@@ -517,7 +517,7 @@ function qqueues(pbs_config, queueName, callback){
         return callback(new Error(output.stderr));
     }
     
-    output = output.stdout.split(lineBreak);
+    output = output.stdout.split(os.EOL);
     // First 2 lines are not relevant
     var queues = [];
     for (var j = 2; j < output.length-1; j++) {
@@ -600,12 +600,12 @@ function qstat(pbs_config, jobId, callback){
     if (jobList){
         var jobs = [];
         if(jobId === 'all'){
-            output = output.stdout.trim().split(lineBreak+lineBreak);
+            output = output.stdout.trim().split(os.EOL+os.EOL);
             for (var m = 0; m < output.length; m++) {
                 jobs.push(jsonifyQstatFull(output[m], pbs_config));
             }
         }else{
-            output = output.stdout.split(lineBreak);
+            output = output.stdout.split(os.EOL);
             // Use the alternative format
             if(pbs_config.useAlternate){
                 // First 5 lines are not relevant
@@ -666,7 +666,7 @@ function qmgr(pbs_config, qmgrCmd, callback){
         return callback(new Error(output.stderr));
     }
     
-    output = output.stdout.split(lineBreak);
+    output = output.stdout.split(os.EOL);
     var qmgrInfo = jsonifyQmgr(output);
     
     return callback(null, qmgrInfo);
@@ -792,7 +792,7 @@ function qfind(pbs_config, jobId, callback){
         if (output.stderr){
             return callback(new Error(output.stderr.replace(/\n/g,"")));
         }
-        output = output.stdout.split(lineBreak);
+        output = output.stdout.split(os.EOL);
         
         var fileList        = [];
         fileList.files      = [];
