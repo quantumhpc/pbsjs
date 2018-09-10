@@ -20,7 +20,7 @@
     "Batch"
   ],
   "author": "QUANTUM HPC Inc.",
-  "license": "AGPL-3.0",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/quantumhpc/pbsjs/issues"
   },
