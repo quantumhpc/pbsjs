@@ -48,12 +48,6 @@ var qActions = {
 };
 
 
-// Failsafe to limit number of jobs
-function trimJobList(jobList, job_limit){
-    var nbJobs = jobList.length;
-    return jobList.slice(Math.max(nbJobs-1-job_limit, Math.min(0,Math.abs(nbJobs-1-job_limit))));
-}
-
 // Helper function to return an array with [full path of exec, arguments] from a command of the cmdDict
 function cmdBuilder(binPath, cmdDictElement){
     return [path.join(binPath, cmdDictElement[0])].concat(cmdDictElement.slice(1,cmdDictElement.length));
@@ -611,14 +605,12 @@ function qstat(pbs_config, jobId, callback){
         var jobs = [];
         if(jobId === 'all'){
             output = output.stdout.trim().split(os.EOL+os.EOL);
-            output = trimJobList(output, job_limit);
 
             for (var m = 0; m < output.length; m++) {
                 jobs.push(jsonifyQstatFull(output[m], pbs_config));
             }
         }else{
             output = output.stdout.split(os.EOL);
-            output = trimJobList(output, job_limit);
             // Use the alternative format
             if(pbs_config.useAlternate){
                 // First 5 lines are not relevant
